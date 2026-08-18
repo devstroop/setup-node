@@ -20,7 +20,7 @@ itself (only `actions/cache` for the tiered toolchain caching).
 | Output        | Description |
 |---------------|-------------|
 | `node-version` | Resolved version (e.g. `24.19.0`, no `v` prefix) |
-| `node-root`    | Installation directory (contains `bin/node`) |
+| `node-root`    | Installation directory (contains `bin/node`, or `node.exe` on Windows) |
 | `cache-hit`    | Whether the toolchain was restored from cache |
 
 ## Usage

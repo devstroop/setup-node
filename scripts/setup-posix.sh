@@ -58,7 +58,7 @@ resolve() {
     local runner_arch="${RUNNER_ARCH:-}"
     [ -z "$runner_arch" ] && runner_arch="$(uname -m)"
     case "$runner_arch" in
-        arm64|aarch64) runner_arch="arm64" ;;
+        [Aa][Rr][Mm]64|[Aa][Aa][Rr][Cc][Hh]64) runner_arch="arm64" ;;
         *) runner_arch="x64" ;;
     esac
 
@@ -196,11 +196,20 @@ install() {
 }
 
 finalize() {
-    [ -x "${INSTALL_ROOT}/bin/node" ] || fail "node binary not found at ${INSTALL_ROOT}/bin/node"
+    # Windows archives have node.exe at the zip root (no bin/ dir);
+    # POSIX archives have bin/node. The Windows layout needs no subdir.
+    local node_dir node_exe
+    if [ -x "${INSTALL_ROOT}/bin/node" ]; then
+        node_dir="${INSTALL_ROOT}/bin"; node_exe="node"
+    elif [ -x "${INSTALL_ROOT}/node.exe" ]; then
+        node_dir="${INSTALL_ROOT}"; node_exe="node.exe"
+    else
+        fail "node binary not found under ${INSTALL_ROOT}"
+    fi
 
     # node --version prints a leading "v"; strip it for the assertion.
     local reported
-    reported="$("$INSTALL_ROOT/bin/node" --version 2>&1 | tr -d '\r')"
+    reported="$("$node_dir/$node_exe" --version 2>&1 | tr -d '\r')"
     echo "node --version: $reported"
     case "$reported" in
         "v${RESOLVED_VERSION}")
@@ -216,7 +225,7 @@ finalize() {
     if [ -n "${GITHUB_ENV:-}" ]; then
         echo "NODE_DIR=${INSTALL_ROOT}" >> "$GITHUB_ENV"
     fi
-    echo "${INSTALL_ROOT}/bin" >> "$GITHUB_PATH"
+    echo "$node_dir" >> "$GITHUB_PATH"
 
     emit "node-version" "$RESOLVED_VERSION"
     emit "node-root" "$INSTALL_ROOT"

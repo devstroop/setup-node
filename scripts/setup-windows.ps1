@@ -4,12 +4,15 @@
 #
 # env: RESOLVED_VERSION, INSTALL_ROOT, ARCHIVE_URL, SHA256, CACHE_HIT, GITHUB_PATH
 #   INSTALL_ROOT is emitted by setup-posix.sh resolve (forward slashes).
+#
+# Note: the win-* zip has node.exe at the archive root (no bin/ dir, unlike
+# the POSIX tarballs), so the runtime root is INSTALL_ROOT itself.
 
 $ErrorActionPreference = "Stop"
 
-$nodeBin = Join-Path $env:INSTALL_ROOT "bin"
+$nodeExe = Join-Path $env:INSTALL_ROOT "node.exe"
 
-if ($env:CACHE_HIT -eq "true" -and (Test-Path (Join-Path $nodeBin "node.exe"))) {
+if ($env:CACHE_HIT -eq "true" -and (Test-Path $nodeExe)) {
     Write-Host "Node.js restored from cache at $env:INSTALL_ROOT"
 } else {
     New-Item -ItemType Directory -Force -Path $env:INSTALL_ROOT | Out-Null
@@ -40,11 +43,11 @@ if ($env:CACHE_HIT -eq "true" -and (Test-Path (Join-Path $nodeBin "node.exe"))) 
         throw "unsupported archive format: $env:ARCHIVE_URL"
     }
 
-    if (-not (Test-Path (Join-Path $nodeBin "node.exe"))) {
-        throw "archive did not contain bin/node.exe at $env:INSTALL_ROOT"
+    if (-not (Test-Path $nodeExe)) {
+        throw "archive did not contain node.exe at $env:INSTALL_ROOT"
     }
     Write-Host "Node.js installed at $env:INSTALL_ROOT"
 }
 
-Add-Content -Path $env:GITHUB_PATH -Value $nodeBin
-Write-Host "Added $nodeBin to PATH"
+Add-Content -Path $env:GITHUB_PATH -Value $env:INSTALL_ROOT
+Write-Host "Added $env:INSTALL_ROOT to PATH"
