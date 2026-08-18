@@ -1,0 +1,98 @@
+name: 'Setup Node'
+description: 'Install a pinned Node.js runtime from the official nodejs.org archives (SHA-256 verified) and expose it on PATH. Version-aware: "lts"/"current" (latest release on that channel), a major line like "22", or an exact version like "22.23.2". Composite action — no Node runtime.'
+author: 'devstroop'
+
+branding:
+  icon: 'terminal'
+  color: 'green'
+
+inputs:
+  version:
+    description: >
+      Node.js version to request: "lts" (latest LTS, default), "current"
+      (newest release overall — may be a non-LTS odd-numbered line), a major
+      line like "22" (latest release on that line), or an exact version like
+      "22.23.2". Resolved against the official release manifest
+      (nodejs.org/dist/index.json) and verified by SHA-256 from the per-release
+      SHASUMS256.txt.
+    default: 'lts'
+  use-cache:
+    description: >
+      Whether to cache the Node.js runtime across workflow runs.
+    default: 'true'
+  cache-key:
+    description: >
+      Additional component appended to cache keys. When using a matrix,
+      include matrix variables so each cell gets its own cache.
+    default: ''
+
+outputs:
+  node-version:
+    description: 'Resolved Node.js version (e.g. 24.19.0).'
+    value: ${{ steps.finalize.outputs.node-version }}
+  node-root:
+    description: 'Node.js installation directory (contains bin/node).'
+    value: ${{ steps.finalize.outputs.node-root }}
+  cache-hit:
+    description: 'Whether the toolchain was restored from cache.'
+    value: ${{ steps.restore-cache.outputs.cache-hit }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Resolve Node.js release
+      id: resolve
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        INPUT_CACHE_KEY: ${{ inputs.cache-key }}
+      run: bash "${{ github.action_path }}/scripts/setup-posix.sh" resolve
+
+    - name: Restore Node.js from cache
+      id: restore-cache
+      if: inputs.use-cache == 'true'
+      uses: actions/cache/restore@v6
+      with:
+        path: ${{ steps.resolve.outputs.install-root }}
+        key: setup-node-${{ runner.os }}-${{ runner.arch }}-${{ steps.resolve.outputs.cache-key }}
+        # No restore-keys: a fallback hit would restore an older runtime
+        # into the resolved version's directory and fail the version
+        # assertion in finalize. Exact-version keys only.
+
+    - name: Install Node.js (Linux/macOS)
+      if: runner.os != 'Windows'
+      shell: bash
+      env:
+        INSTALL_ROOT: ${{ steps.resolve.outputs.install-root }}
+        ARCHIVE_URL: ${{ steps.resolve.outputs.archive-url }}
+        SHA256: ${{ steps.resolve.outputs.sha256 }}
+        CACHE_HIT: ${{ steps.restore-cache.outputs.cache-hit }}
+      run: bash "${{ github.action_path }}/scripts/setup-posix.sh" install
+
+    - name: Install Node.js (Windows)
+      if: runner.os == 'Windows'
+      shell: pwsh
+      env:
+        RESOLVED_VERSION: ${{ steps.resolve.outputs.resolved-version }}
+        INSTALL_ROOT: ${{ steps.resolve.outputs.install-root }}
+        ARCHIVE_URL: ${{ steps.resolve.outputs.archive-url }}
+        SHA256: ${{ steps.resolve.outputs.sha256 }}
+        CACHE_HIT: ${{ steps.restore-cache.outputs.cache-hit }}
+      run: pwsh -NoProfile -NonInteractive -File "${{ github.action_path }}/scripts/setup-windows.ps1"
+
+    - name: Save Node.js to cache
+      if: always() && inputs.use-cache == 'true' && steps.restore-cache.outputs.cache-hit != 'true'
+      continue-on-error: true
+      uses: actions/cache/save@v6
+      with:
+        path: ${{ steps.resolve.outputs.install-root }}
+        key: setup-node-${{ runner.os }}-${{ runner.arch }}-${{ steps.resolve.outputs.cache-key }}
+
+    - name: Assert version and emit outputs
+      id: finalize
+      shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
+        RESOLVED_VERSION: ${{ steps.resolve.outputs.resolved-version }}
+        INSTALL_ROOT: ${{ steps.resolve.outputs.install-root }}
+      run: bash "${{ github.action_path }}/scripts/setup-posix.sh" finalize
